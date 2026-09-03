@@ -4,6 +4,7 @@ import ExtractReport from './pages/ExtractReport'
 import ExtractionProgress from './pages/ExtractionProgress'
 import ExtractionHistory from './pages/ExtractionHistory'
 import ReportReview from './pages/ReportReview'
+import SheetExport from './pages/SheetExport'
 import UserGuide from './pages/UserGuide'
 
 export default function App() {
@@ -18,6 +19,8 @@ export default function App() {
         <Route path="/guide" element={<UserGuide />} />
         <Route path="*" element={<Navigate to="/extract" replace />} />
       </Route>
+      {/* Outside the app chrome — it stands in for an external Google Sheet. */}
+      <Route path="/reports/:reportId/sheet" element={<SheetExport />} />
     </Routes>
   )
 }

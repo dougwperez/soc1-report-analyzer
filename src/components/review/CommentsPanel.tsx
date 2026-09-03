@@ -1,27 +1,35 @@
 import { useMemo, useState } from 'react'
 import type { CommentThread, PhaseId, Report } from '../../types'
 import { userById } from '../../data/reference'
-import { Avatar, Badge, Button, Card, CommentIcon, EmptyState, TextArea } from '../ui'
+import { Avatar, Badge, Button, CommentIcon, Drawer, EmptyState, TextArea } from '../ui'
 import { classNames as cx, relativeTime } from '../../lib/util'
 
 interface Props {
+  open: boolean
+  onClose: () => void
   report: Report
   phase: PhaseId
+  phaseLabel: string
   currentUserId: string
   readOnly: boolean
   onReply: (threadId: string, body: string) => void
   onToggleResolved: (threadId: string, resolved: boolean) => void
   onJumpToAnchor: (path: string) => void
+  onAddSectionComment: () => void
 }
 
 export default function CommentsPanel({
+  open,
+  onClose,
   report,
   phase,
+  phaseLabel,
   currentUserId,
   readOnly,
   onReply,
   onToggleResolved,
   onJumpToAnchor,
+  onAddSectionComment,
 }: Props) {
   const [scope, setScope] = useState<'phase' | 'all'>('phase')
   const [showResolved, setShowResolved] = useState(false)
@@ -36,14 +44,15 @@ export default function CommentsPanel({
   const openCount = report.comments.filter((t) => !t.resolved).length
 
   return (
-    <Card className="mt-3">
-      <div className="flex flex-wrap items-center gap-2 border-b border-ink-100 px-3.5 py-2.5">
-        <h3 className="flex items-center gap-1.5 text-[13px] font-semibold text-ink-900">
-          <CommentIcon className="h-4 w-4 text-ink-400" />
-          Discussion
-        </h3>
-        {openCount > 0 && <Badge tone="amber">{openCount} open</Badge>}
-        <div className="ml-auto flex items-center gap-1">
+    <Drawer
+      open={open}
+      onClose={onClose}
+      title="Discussion"
+      icon={<CommentIcon className="h-4 w-4 text-ink-400" />}
+      titleAccessory={openCount > 0 ? <Badge tone="amber">{openCount} open</Badge> : undefined}
+      description={scope === 'phase' ? phaseLabel : 'All sections of this report'}
+      toolbar={
+        <div className="flex items-center gap-1">
           <Button size="sm" variant={scope === 'phase' ? 'subtle' : 'ghost'} onClick={() => setScope('phase')}>
             This section
           </Button>
@@ -55,8 +64,13 @@ export default function CommentsPanel({
             {showResolved ? 'Hide resolved' : 'Show resolved'}
           </Button>
         </div>
-      </div>
-
+      }
+      footer={
+        <Button variant="secondary" size="sm" disabled={readOnly} onClick={onAddSectionComment}>
+          <CommentIcon className="h-3.5 w-3.5" /> Add a section comment
+        </Button>
+      }
+    >
       {threads.length === 0 ? (
         <EmptyState
           title="No comments here"
@@ -78,7 +92,7 @@ export default function CommentsPanel({
           ))}
         </ul>
       )}
-    </Card>
+    </Drawer>
   )
 }
 

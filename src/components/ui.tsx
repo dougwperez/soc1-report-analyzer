@@ -454,6 +454,77 @@ export function Modal({
   )
 }
 
+/* --------------------------------- drawer --------------------------------- */
+
+/** Right-hand slide-over sheet. Same escape/overlay behaviour as Modal. */
+export function Drawer({
+  open,
+  onClose,
+  title,
+  description,
+  icon,
+  titleAccessory,
+  toolbar,
+  children,
+  footer,
+  width = 'max-w-[30rem]',
+}: {
+  open: boolean
+  onClose: () => void
+  title: string
+  description?: ReactNode
+  icon?: ReactNode
+  titleAccessory?: ReactNode
+  toolbar?: ReactNode
+  children?: ReactNode
+  footer?: ReactNode
+  width?: string
+}) {
+  useEffect(() => {
+    if (!open) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [open, onClose])
+
+  if (!open) return null
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-ink-900/30" onMouseDown={onClose}>
+      <aside
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        onMouseDown={(e) => e.stopPropagation()}
+        className={cx(
+          'animate-slide-in-right flex h-full w-full flex-col border-l border-ink-200 bg-white shadow-2xl',
+          width,
+        )}
+      >
+        <div className="flex shrink-0 items-start gap-2 border-b border-ink-200 px-4 py-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="flex items-center gap-1.5 text-[14px] font-semibold text-ink-900">
+                {icon}
+                {title}
+              </h2>
+              {titleAccessory}
+            </div>
+            {description && <p className="mt-0.5 text-[12px] text-ink-500">{description}</p>}
+          </div>
+          <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close" title="Close">
+            <CloseIcon className="h-4 w-4" />
+          </Button>
+        </div>
+        {toolbar && <div className="shrink-0 border-b border-ink-100 bg-ink-50 px-3 py-2">{toolbar}</div>}
+        <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+        {footer && <div className="shrink-0 border-t border-ink-200 bg-ink-50 px-4 py-3">{footer}</div>}
+      </aside>
+    </div>
+  )
+}
+
 /* -------------------------------- feedback -------------------------------- */
 
 export function Spinner({ className }: { className?: string }) {

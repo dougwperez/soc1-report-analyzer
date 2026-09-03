@@ -24,6 +24,7 @@ import {
   Card,
   CheckIcon,
   CloseIcon,
+  CommentIcon,
   EmptyState,
   ExtractionStatusBadge,
   Label,
@@ -38,6 +39,28 @@ import {
 } from '../components/ui'
 import type { Field, PhaseId, SourceAnnotation } from '../types'
 import { classNames as cx, formatDateTime, getPath, uid } from '../lib/util'
+
+/**
+ * Where the mock Sheets export lands — a static in-app spreadsheet, not Google.
+ * `forceLoad` adds a query marker: the placeholder tab inherits the opener's URL,
+ * so a hash-only change would swap the address bar without reloading the page.
+ */
+function sheetUrl(reportId: string, forceLoad = false): string {
+  const query = forceLoad ? '?export=1' : ''
+  return `${window.location.origin}${import.meta.env.BASE_URL}${query}#/reports/${reportId}/sheet`
+}
+
+/** Holding page shown in the new tab while the export "writes". */
+function exportPlaceholder(reportName: string): string {
+  return `<!doctype html><title>Preparing export…</title>
+<body style="margin:0;height:100vh;display:flex;align-items:center;justify-content:center;
+  font:14px/1.5 Inter,system-ui,sans-serif;color:#3f4553;background:#f6f7f9">
+  <div style="text-align:center">
+    <div style="font-weight:600;color:#1b1f27">Writing ${reportName} to Google Sheets…</div>
+    <div style="margin-top:4px;color:#6b7383">Six tabs, one per review phase.</div>
+  </div>
+</body>`
+}
 
 /* --------------------------- field-walking helpers -------------------------- */
 
@@ -79,6 +102,7 @@ export default function ReportReview() {
   const [commentTarget, setCommentTarget] = useState<{ path?: string; label: string } | null>(null)
   const [commentDraft, setCommentDraft] = useState('')
   const [peopleOpen, setPeopleOpen] = useState(false)
+  const [commentsOpen, setCommentsOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [exportFail, setExportFail] = useState(false)
@@ -201,6 +225,7 @@ export default function ReportReview() {
     })
     setCommentTarget(null)
     setCommentDraft('')
+    setCommentsOpen(true)
     toast('success', 'Comment added')
   }
 
@@ -243,6 +268,12 @@ export default function ReportReview() {
   function runExport() {
     if (!report) return
     setExporting(true)
+    // The tab has to be opened inside the click handler — one opened later from
+    // the timeout is not tied to a user gesture and gets blocked as a pop-up.
+    // It parks on a placeholder until the (simulated) write finishes.
+    const tab = exportFail ? null : window.open('', '_blank')
+    if (tab) tab.document.write(exportPlaceholder(report.name))
+
     setTimeout(() => {
       setExporting(false)
       if (exportFail) {
@@ -253,10 +284,19 @@ export default function ReportReview() {
         )
         return
       }
-      const url = `https://docs.google.com/spreadsheets/d/${report.id.toLowerCase()}-soc1-export`
+      const url = sheetUrl(report.id)
       dispatch({ type: 'patch_report', id: report.id, patch: { exportedSheetUrl: url } })
       logAudit(report.id, 'Exported review results to Google Sheets')
-      toast('success', 'Exported to Google Sheets', `${report.name} · 6 tabs written`)
+      if (tab && !tab.closed) {
+        tab.location.replace(sheetUrl(report.id, true))
+        toast('success', 'Exported to Google Sheets', `${report.name} · 6 tabs written · opened in a new tab`)
+      } else {
+        toast(
+          'success',
+          'Exported to Google Sheets',
+          `${report.name} · 6 tabs written. Your browser blocked the new tab — use “Open sheet” below.`,
+        )
+      }
       setExportOpen(false)
     }, 1500)
   }
@@ -383,6 +423,7 @@ export default function ReportReview() {
     (e) => e.qualifiedOpinionImpact.value === 'Contributes to qualification',
   )
   const rolledForwardCount = allFields.filter((f) => f.field.origin === 'rolled_forward').length
+  const openCommentCount = report.comments.filter((t) => !t.resolved).length
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col">
@@ -424,6 +465,17 @@ export default function ReportReview() {
                 {report.watcherIds.length > 0 ? `+${report.watcherIds.length} watching` : 'Add watchers'}
               </span>
             </button>
+
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setCommentsOpen((v) => !v)}
+              title="Open the discussion sidebar"
+            >
+              <CommentIcon className="h-3.5 w-3.5" />
+              Comments
+              {openCommentCount > 0 && <Badge tone="amber">{openCommentCount}</Badge>}
+            </Button>
 
             <Button variant="secondary" size="sm" onClick={() => setShowPdf((v) => !v)}>
               <PanelIcon className="h-3.5 w-3.5" />
@@ -707,62 +759,17 @@ export default function ReportReview() {
               />
             )}
 
-            <CommentsPanel
-              report={report}
-              phase={phase}
-              currentUserId={state.currentUserId}
-              readOnly={approved}
-              onReply={(threadId, body) =>
-                dispatch({
-                  type: 'add_entry',
-                  id: report.id,
-                  threadId,
-                  entry: { id: uid('c'), authorId: state.currentUserId, body, createdAt: new Date().toISOString() },
-                })
-              }
-              onToggleResolved={(threadId, resolved) =>
-                dispatch({ type: 'resolve_thread', id: report.id, threadId, resolved, userId: state.currentUserId })
-              }
-              onJumpToAnchor={(path) => {
-                setPhase(phaseOfPath(path))
-                setActivePath(path)
-                const field = getPath(report.data, path)
-                if (isField(field) && field.source) {
-                  setFocus({ annotation: field.source, label: path })
-                  setMissingSource(null)
-                  setShowPdf(true)
-                }
-              }}
-            />
-
-            <div className="mt-3">
-              <Button variant="secondary" size="sm" onClick={() => onComment('', `${currentPhase.label} (section)`)}>
-                Add a section comment
-              </Button>
-            </div>
-
-            {/* audit trail */}
-            <Card className="mt-3 p-3.5">
-              <h3 className="text-[13px] font-semibold text-ink-900">Activity</h3>
-              <ul className="mt-2 flex flex-col gap-1.5">
-                {report.audit.slice().reverse().map((a) => (
-                  <li key={a.id} className="flex items-start gap-2 text-[12px]">
-                    <Avatar user={userById(a.userId)} size={18} />
-                    <span className="min-w-0 flex-1 text-ink-700">
-                      <span className="font-medium text-ink-800">{userById(a.userId)?.name ?? 'Someone'}</span>{' '}
-                      {a.summary}
-                    </span>
-                    <span className="shrink-0 text-[11px] text-ink-400">{formatDateTime(a.at)}</span>
-                  </li>
-                ))}
-                {report.audit.length === 0 && <li className="text-[12px] text-ink-400">No activity recorded yet.</li>}
-              </ul>
-            </Card>
-
             {report.exportedSheetUrl && (
               <div className="mt-3">
                 <Callout tone="success" title="Exported to Google Sheets">
-                  <span className="break-all font-mono text-[11.5px]">{report.exportedSheetUrl}</span>
+                  <span className="break-all font-mono text-[11.5px]">{sheetUrl(report.id)}</span>
+                  <div className="mt-2">
+                    <a href={sheetUrl(report.id)} target="_blank" rel="noreferrer">
+                      <Button variant="secondary" size="sm">
+                        <SheetIcon className="h-3.5 w-3.5" /> Open sheet
+                      </Button>
+                    </a>
+                  </div>
                 </Callout>
               </div>
             )}
@@ -782,6 +789,41 @@ export default function ReportReview() {
           </div>
         )}
       </div>
+
+      {/* ============================ discussion sidebar ====================== */}
+
+      <CommentsPanel
+        open={commentsOpen}
+        onClose={() => setCommentsOpen(false)}
+        report={report}
+        phase={phase}
+        phaseLabel={currentPhase.label}
+        currentUserId={state.currentUserId}
+        readOnly={approved}
+        onAddSectionComment={() => onComment('', `${currentPhase.label} (section)`)}
+        onReply={(threadId, body) =>
+          dispatch({
+            type: 'add_entry',
+            id: report.id,
+            threadId,
+            entry: { id: uid('c'), authorId: state.currentUserId, body, createdAt: new Date().toISOString() },
+          })
+        }
+        onToggleResolved={(threadId, resolved) =>
+          dispatch({ type: 'resolve_thread', id: report.id, threadId, resolved, userId: state.currentUserId })
+        }
+        onJumpToAnchor={(path) => {
+          setPhase(phaseOfPath(path))
+          setActivePath(path)
+          const field = getPath(report.data, path)
+          if (isField(field) && field.source) {
+            setFocus({ annotation: field.source, label: path })
+            setMissingSource(null)
+            setShowPdf(true)
+          }
+          setCommentsOpen(false)
+        }}
+      />
 
       {/* ================================ modals =============================== */}
 
