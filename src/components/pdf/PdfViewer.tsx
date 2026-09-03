@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { getPages } from '../../data/pdfDocument'
 import type { PdfBlock } from '../../data/pdfDocument'
 import type { SourceAnnotation } from '../../types'
-import { AlertIcon, Badge, Button, Callout, ChevronIcon, CloseIcon, ConfidenceMeter, Spinner } from '../ui'
+import { AlertIcon, Button, Callout, ChevronIcon, CloseIcon, Spinner } from '../ui'
 import { classNames as cx, splitOnQuote } from '../../lib/util'
 
 interface Props {
@@ -37,9 +37,20 @@ export default function PdfViewer({ documentId, fileName, focus, missingSource, 
     return () => clearTimeout(t)
   }, [documentId])
 
+  /**
+   * Position `el` inside the scroll container, `offset` px below its top edge.
+   * Set directly rather than via smooth scrolling — smooth scrollTo is a silent
+   * no-op on this container in some browsers, which loses the jump entirely.
+   */
+  function scrollToElement(el: HTMLElement, offset: number) {
+    const container = scrollRef.current
+    if (!container) return
+    const delta = el.getBoundingClientRect().top - container.getBoundingClientRect().top
+    container.scrollTop = container.scrollTop + delta - offset
+  }
+
   // Centre the highlighted quotation, falling back to the top of the cited page
-  // when the quote could not be matched. One scroll on the container itself —
-  // nested scrollIntoView calls fight each other and land nowhere.
+  // when the quote could not be matched.
   useEffect(() => {
     if (!focus || loading || failed) return
     let raf = 0
@@ -50,9 +61,7 @@ export default function PdfViewer({ documentId, fileName, focus, missingSource, 
         const mark = markRef.current && document.contains(markRef.current) ? markRef.current : null
         const target = mark ?? pageRefs.current[focus.annotation.page]
         if (!target) return
-        const delta = target.getBoundingClientRect().top - container.getBoundingClientRect().top
-        const offset = mark ? container.clientHeight / 2 - 40 : 8
-        container.scrollTo({ top: container.scrollTop + delta - offset, behavior: 'smooth' })
+        scrollToElement(target, mark ? container.clientHeight / 2 - 40 : 8)
         setVisiblePage(focus.annotation.page)
       })
     }, 60)
@@ -64,7 +73,8 @@ export default function PdfViewer({ documentId, fileName, focus, missingSource, 
 
   function goToPage(n: number) {
     const clamped = Math.min(pages.length, Math.max(1, n))
-    pageRefs.current[clamped]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    const el = pageRefs.current[clamped]
+    if (el) scrollToElement(el, 8)
     setVisiblePage(clamped)
   }
 
@@ -79,8 +89,6 @@ export default function PdfViewer({ documentId, fileName, focus, missingSource, 
     }
     setVisiblePage(current)
   }
-
-  const bbox = focus?.annotation.bbox
 
   return (
     <div className="flex h-full min-h-0 flex-col border-l border-ink-200 bg-ink-100">
@@ -145,29 +153,6 @@ export default function PdfViewer({ documentId, fileName, focus, missingSource, 
           </p>
         </div>
       )}
-      {focus && !failed && (
-        <div className="shrink-0 border-b border-amber-200 bg-amber-50 px-3 py-2">
-          <div className="flex items-start gap-2">
-            <div className="min-w-0 flex-1">
-              <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] font-semibold uppercase tracking-wide text-amber-800">
-                Source evidence
-                <Badge tone="amber">Page {focus.annotation.page}</Badge>
-                <ConfidenceMeter value={focus.annotation.confidence} />
-              </p>
-              <p className="mt-1 text-[12.5px] leading-relaxed text-ink-800">
-                “{focus.annotation.quote.length > 220 ? `${focus.annotation.quote.slice(0, 220)}…` : focus.annotation.quote}”
-              </p>
-              {bbox && (
-                <p className="tnum mt-1 font-mono text-[11px] text-amber-700">
-                  bbox [x {bbox.x.toFixed(3)}, y {bbox.y.toFixed(3)}, w {bbox.w.toFixed(3)}, h {bbox.h.toFixed(3)}] · cited
-                  for {focus.label}
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* -------------------------------- document ------------------------------ */}
       <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         {failed ? (
