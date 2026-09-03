@@ -36,7 +36,7 @@ If the repo name differs, update `base` in `vite.config.ts` to match.
 
 | Route | Screen |
 | --- | --- |
-| `#/extract` | Upload — drag-and-drop, typeaheads, password field, document-state validation |
+| `#/extract` | Upload — centered drag-and-drop drawer, document-state validation |
 | `#/progress/:id` | Extraction progress — seven concurrent extractors with per-extractor status |
 | `#/history` | Extraction History — filterable table with loading / empty / error / populated states |
 | `#/reports/:id` | Report Review — split-screen extracted data + source PDF, six review phases |
@@ -64,9 +64,13 @@ If the repo name differs, update `base` in `vite.config.ts` to match.
 
 ### Reaching the error states
 
-- **Upload screen** — the sample-document list loads a fictional report for each document
-  state (standard, password-protected, copy-locked/OCR, invalid type, upload failure).
-  The protected sample's password is `demo1234`.
+- **Upload screen** — the document's state is read from the file name, so dropping (or
+  browsing to) any file exercises a path. Anything ending `.pdf` is a standard document;
+  a name containing `protected` / `password` is encrypted (password `demo1234`),
+  `scanned` / `ocr` / `locked` triggers the OCR failure, `fail` / `503` triggers the upload
+  failure, `reissued` / `qualified` produces the qualified-opinion report, and a non-PDF
+  extension is rejected as an invalid file. The five fictional reports are matched by their
+  exact file names, e.g. `northwind-paycycle-fy2025-soc1.pdf`.
 - **Extraction History** — the "State:" selector switches between populated, loading, empty,
   and error.
 - **Report Review** — the alert icon in the header toggles save and export failures; the
