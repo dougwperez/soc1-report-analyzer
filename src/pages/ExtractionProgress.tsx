@@ -145,7 +145,6 @@ export default function ExtractionProgress() {
 
   const done = extractors.filter((e) => e.status === 'completed').length
   const failed = extractors.filter((e) => e.status === 'failed').length
-  const running = extractors.filter((e) => e.status === 'running')
   const settled = done + failed === extractors.length && extractors.length > 0
   const overall = extractors.length
     ? extractors.reduce((sum, e) => sum + (e.status === 'completed' || e.status === 'failed' ? 100 : e.progress), 0) /
@@ -233,47 +232,36 @@ export default function ExtractionProgress() {
       />
 
       {/* --------------------------- overall status --------------------------- */}
-      <Card className="mt-5 p-5">
-        <div className="flex items-end justify-between gap-6">
-          <div>
-            <p className="text-[12px] font-medium uppercase tracking-wide text-ink-500">
-              {settled && !live ? 'Extraction finished' : ocrPhase ? 'Pre-processing' : 'Extracting'}
-            </p>
-            <p className="mt-1 text-[22px] font-semibold leading-none text-ink-900">
-              {ocrPhase ? (
-                'Running OCR…'
-              ) : (
-                <>
-                  <span className="tnum">{done}</span>
-                  <span className="text-ink-400"> / {extractors.length}</span>{' '}
-                  <span className="text-[15px] font-medium text-ink-600">sections extracted</span>
-                </>
-              )}
-            </p>
-            <p className="mt-1.5 text-[12.5px] text-ink-500">
-              {ocrPhase
-                ? 'The document has no text layer, so it is being rasterised and recognised before extraction can start.'
-                : running.length > 0
-                  ? `Currently running: ${running.map((r) => r.label).join(', ')}`
-                  : failed > 0
-                    ? `${failed} extractor${failed > 1 ? 's' : ''} failed. Completed sections were preserved.`
-                    : 'All extractors have finished.'}
-            </p>
-          </div>
-          <div className="shrink-0 text-right">
-            <p className="text-[12px] font-medium uppercase tracking-wide text-ink-500">Elapsed</p>
-            <p className="tnum mt-1 text-[22px] font-semibold leading-none text-ink-900">
-              {formatElapsed(live ? elapsed : TOTAL_MS)}
-            </p>
-            <p className="mt-1.5 text-[12.5px] text-ink-500">typical: 1–2 min</p>
-          </div>
+      <Card className="mt-4 px-5 py-4">
+        <div className="flex items-baseline justify-between gap-6">
+          <p className="text-[15px] font-semibold text-ink-900">
+            {ocrPhase ? (
+              'Running OCR…'
+            ) : (
+              <>
+                <span className="tnum text-[20px]">{done}</span>
+                <span className="text-[20px] text-ink-400"> / {extractors.length}</span>{' '}
+                <span className="font-medium text-ink-600">sections extracted</span>
+              </>
+            )}
+          </p>
+          <p className="tnum shrink-0 text-[13px] text-ink-500">
+            {formatElapsed(live ? elapsed : TOTAL_MS)} elapsed
+          </p>
         </div>
-        <div className="mt-4">
+        <div className="mt-3">
           <ProgressBar
             value={ocrPhase ? (elapsed / OCR_DURATION) * 100 : overall}
             tone={failed > 0 ? (done === 0 ? 'red' : 'amber') : 'brand'}
           />
         </div>
+        {live && !ocrFailed && (
+          <p className="mt-2.5 text-[12px] text-ink-500">
+            {ocrPhase
+              ? 'The document has no text layer, so it is being recognised before extraction can start.'
+              : 'Runs in the background — you can leave this page. Slack will tell you when it is ready.'}
+          </p>
+        )}
       </Card>
 
       {ocrFailed && (
@@ -292,85 +280,63 @@ export default function ExtractionProgress() {
         </div>
       )}
 
-      {live && !ocrFailed && (
-        <div className="mt-4">
-          <Callout tone="info" title="You can leave this page">
-            Extraction runs in the background. You will get a Slack notification when {report.name} is ready, and it
-            will appear in Extraction History either way.
-          </Callout>
+      {/* --------------------------- extractor list --------------------------- */}
+      <Card className="mt-4">
+        <div className="border-b border-ink-100 px-4 py-2.5">
+          <h3 className="text-[12px] font-medium uppercase tracking-wide text-ink-500">
+            Extractors · run in parallel over the full document
+          </h3>
         </div>
-      )}
-
-      {/* --------------------------- extractor grid --------------------------- */}
-      <div className="mt-5">
-        <h3 className="mb-2 text-[13px] font-semibold text-ink-900">
-          Extractors <span className="font-normal text-ink-500">· seven section-specific prompts run in parallel over the full document</span>
-        </h3>
-        <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
-          {extractors.map((e) => {
-            const meta = statusMeta(e.status)
-            return (
-              <Card
-                key={e.id}
-                className={cx(
-                  'p-3.5',
-                  e.status === 'failed' && 'border-red-200 bg-red-50/40',
-                  e.status === 'running' && 'border-brand-200',
-                )}
-              >
-                <div className="flex items-start gap-2.5">
-                  <span className="mt-0.5">
-                    {e.status === 'completed' && (
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
-                        <CheckIcon className="h-3.5 w-3.5" />
-                      </span>
-                    )}
-                    {e.status === 'running' && (
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-100 text-brand-700">
-                        <Spinner className="h-3 w-3" />
-                      </span>
-                    )}
-                    {e.status === 'failed' && (
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-red-100 text-red-700">
-                        <AlertIcon className="h-3.5 w-3.5" />
-                      </span>
-                    )}
-                    {e.status === 'pending' && (
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full border border-dashed border-ink-300 text-[10px] text-ink-400">
-                        ·
-                      </span>
-                    )}
+        <ul className="divide-y divide-ink-100">
+          {extractors.map((e) => (
+            <li
+              key={e.id}
+              className={cx('flex items-start gap-3 px-4 py-3', e.status === 'failed' && 'bg-red-50/50')}
+            >
+              <span className="mt-[1px] shrink-0">
+                {e.status === 'completed' && (
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-white">
+                    <CheckIcon className="h-3.5 w-3.5" />
                   </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="truncate text-[13px] font-medium text-ink-900">{e.label}</p>
-                      <Badge tone={meta.tone}>{meta.label}</Badge>
-                    </div>
-                    <p className="mt-0.5 text-[12px] text-ink-500">{e.blurb}</p>
+                )}
+                {e.status === 'running' && <Spinner className="h-5 w-5 text-brand-600" />}
+                {e.status === 'failed' && (
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-red-100 text-red-700">
+                    <AlertIcon className="h-3.5 w-3.5" />
+                  </span>
+                )}
+                {e.status === 'pending' && (
+                  <span className="block h-5 w-5 rounded-full border border-dashed border-ink-300" />
+                )}
+              </span>
 
-                    {e.status === 'running' && (
-                      <div className="mt-2 flex items-center gap-2">
-                        <div className="flex-1">
-                          <ProgressBar value={e.progress} />
-                        </div>
-                        <span className="tnum w-8 text-right text-[11.5px] text-ink-500">{e.progress}%</span>
-                      </div>
-                    )}
-                    {e.status === 'completed' && e.itemsFound !== undefined && (
-                      <p className="mt-1.5 text-[12px] text-emerald-700">
-                        {e.itemsFound} item{e.itemsFound === 1 ? '' : 's'} extracted · schema validated
-                      </p>
-                    )}
-                    {e.status === 'failed' && e.error && (
-                      <p className="mt-1.5 text-[12px] leading-relaxed text-red-700">{e.error}</p>
-                    )}
-                  </div>
-                </div>
-              </Card>
-            )
-          })}
-        </div>
-      </div>
+              <div className="min-w-0 flex-1">
+                <p
+                  className={cx(
+                    'text-[13px] font-medium',
+                    e.status === 'pending' ? 'text-ink-400' : 'text-ink-900',
+                  )}
+                >
+                  {e.label}
+                </p>
+                {e.status === 'completed' && e.itemsFound !== undefined ? (
+                  <p className="mt-0.5 text-[12px] text-emerald-700">
+                    {e.itemsFound} item{e.itemsFound === 1 ? '' : 's'} extracted · schema validated
+                  </p>
+                ) : e.status === 'failed' && e.error ? (
+                  <p className="mt-0.5 text-[12px] leading-relaxed text-red-700">{e.error}</p>
+                ) : (
+                  <p className="mt-0.5 text-[12px] text-ink-500">{e.blurb}</p>
+                )}
+              </div>
+
+              <span className="shrink-0 pt-[1px]">
+                <Badge tone={statusMeta(e.status).tone}>{statusMeta(e.status).label}</Badge>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </Card>
 
       {settled && !live && !ocrFailed && (
         <div className="mt-5">
