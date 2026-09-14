@@ -1,10 +1,11 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useStore } from '../store/store'
 import { phases, users, userById } from '../data/reference'
 import { standardData } from '../data/reports'
 import PdfViewer from '../components/pdf/PdfViewer'
 import CommentsPanel from '../components/review/CommentsPanel'
+import PaneDivider, { DEFAULT_SPLIT, MIN_PANE_PX } from '../components/review/PaneDivider'
 import {
   BasicSection,
   CuecsSection,
@@ -35,7 +36,6 @@ import {
   SheetIcon,
   Spinner,
   TextArea,
-  RollIcon,
 } from '../components/ui'
 import type { Field, PhaseId, SourceAnnotation } from '../types'
 import { classNames as cx, formatDateTime, getPath, uid } from '../lib/util'
@@ -60,6 +60,28 @@ function exportPlaceholder(reportName: string): string {
     <div style="margin-top:4px;color:#6b7383">Six tabs, one per review phase.</div>
   </div>
 </body>`
+}
+
+/* ------------------------------ pane split ------------------------------ */
+
+const SPLIT_KEY = 'soc1-analyzer/review-split'
+
+/** Left pane width (%) the reviewer last dragged to; a per-browser convenience. */
+function loadSplit(): number {
+  try {
+    const n = Number(localStorage.getItem(SPLIT_KEY))
+    return n > 0 && n < 100 ? n : DEFAULT_SPLIT
+  } catch {
+    return DEFAULT_SPLIT
+  }
+}
+
+function saveSplit(pct: number) {
+  try {
+    localStorage.setItem(SPLIT_KEY, String(Math.round(pct * 10) / 10))
+  } catch {
+    // Storage can be unavailable (private mode); the split just resets next visit.
+  }
 }
 
 /* --------------------------- field-walking helpers -------------------------- */
@@ -96,6 +118,8 @@ export default function ReportReview() {
 
   const [phase, setPhase] = useState<PhaseId>('basic')
   const [showPdf, setShowPdf] = useState(true)
+  const [splitPct, setSplitPct] = useState(loadSplit)
+  const bodyRef = useRef<HTMLDivElement>(null)
   const [focus, setFocus] = useState<{ annotation: SourceAnnotation; label: string } | null>(null)
   const [missingSource, setMissingSource] = useState<string | null>(null)
   const [activePath, setActivePath] = useState<string | null>(null)
@@ -422,7 +446,6 @@ export default function ReportReview() {
   const qualifyingExceptions = report.data.exceptions.filter(
     (e) => e.qualifiedOpinionImpact.value === 'Contributes to qualification',
   )
-  const rolledForwardCount = allFields.filter((f) => f.field.origin === 'rolled_forward').length
   const openCommentCount = report.comments.filter((t) => !t.resolved).length
 
   return (
@@ -593,9 +616,17 @@ export default function ReportReview() {
       )}
 
       {/* ================================ body ================================= */}
-      <div className="flex min-h-0 flex-1">
+      <div ref={bodyRef} className="flex min-h-0 flex-1">
         {/* ------------------------------ left pane ---------------------------- */}
-        <div className={cx('flex min-w-0 flex-col', showPdf ? 'w-1/2' : 'w-full')}>
+        <div
+          className={cx('flex min-w-0 flex-col', !showPdf && 'w-full')}
+          // clamp() keeps both panes usable when the window shrinks after a drag.
+          style={
+            showPdf
+              ? { width: `clamp(${MIN_PANE_PX}px, ${splitPct}%, calc(100% - ${MIN_PANE_PX}px))` }
+              : undefined
+          }
+        >
           {/* phase navigation */}
           <div className="shrink-0 border-b border-ink-200 bg-white px-3 pt-2">
             <div className="flex gap-1 overflow-x-auto pb-2">
@@ -669,19 +700,6 @@ export default function ReportReview() {
                 <Callout tone="success" title="This report is approved and read-only">
                   Approved by {userById(report.audit.at(-1)?.userId)?.name ?? 'an approver'}. Reopen it from AuditBoard
                   if a correction is needed.
-                </Callout>
-              </div>
-            )}
-
-            {/* rolled-forward context on the sections that carry prior-year values */}
-            {report.priorReportName && ['cuecs', 'subservice', 'vendors'].includes(phase) && rolledForwardCount > 0 && (
-              <div className="mb-3">
-                <Callout tone="info" title="Prior-year values carried forward">
-                  <span className="inline-flex items-center gap-1">
-                    <RollIcon className="h-3.5 w-3.5" />
-                    Values marked <strong>Rolled forward</strong> came from {report.priorReportName}. They are proposals
-                    for this period, not conclusions — each one has to be reconfirmed or replaced.
-                  </span>
                 </Callout>
               </div>
             )}
@@ -778,7 +796,10 @@ export default function ReportReview() {
 
         {/* ------------------------------ right pane --------------------------- */}
         {showPdf && (
-          <div className="w-1/2 min-w-0">
+          <PaneDivider containerRef={bodyRef} value={splitPct} onChange={setSplitPct} onCommit={saveSplit} />
+        )}
+        {showPdf && (
+          <div className="min-w-0 flex-1">
             <PdfViewer
               documentId={report.documentId}
               fileName={report.fileName ?? `${report.id.toLowerCase()}-soc1-report.pdf`}

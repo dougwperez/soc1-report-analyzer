@@ -339,11 +339,6 @@ export function SubserviceSection({ ctx }: { ctx: SectionCtx }) {
   const orgs = ctx.report.data!.subservice
   return (
     <div className="flex flex-col gap-2.5">
-      <Callout tone="info" title="Carved-out providers need their own evidence">
-        Controls at a carved-out subservice organization are outside the scope of this report. Where one supports a
-        financially relevant objective, obtain its own SOC report or document an alternative procedure.
-      </Callout>
-
       {orgs.map((s, i) => (
         <Collapsible
           key={s.id}
