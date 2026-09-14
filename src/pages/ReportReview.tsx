@@ -36,7 +36,6 @@ import {
   SheetIcon,
   Spinner,
   TextArea,
-  RollIcon,
 } from '../components/ui'
 import type { Field, PhaseId, SourceAnnotation } from '../types'
 import { classNames as cx, formatDateTime, getPath, uid } from '../lib/util'
@@ -447,7 +446,6 @@ export default function ReportReview() {
   const qualifyingExceptions = report.data.exceptions.filter(
     (e) => e.qualifiedOpinionImpact.value === 'Contributes to qualification',
   )
-  const rolledForwardCount = allFields.filter((f) => f.field.origin === 'rolled_forward').length
   const openCommentCount = report.comments.filter((t) => !t.resolved).length
 
   return (
@@ -702,19 +700,6 @@ export default function ReportReview() {
                 <Callout tone="success" title="This report is approved and read-only">
                   Approved by {userById(report.audit.at(-1)?.userId)?.name ?? 'an approver'}. Reopen it from AuditBoard
                   if a correction is needed.
-                </Callout>
-              </div>
-            )}
-
-            {/* rolled-forward context on the sections that carry prior-year values */}
-            {report.priorReportName && ['cuecs', 'subservice', 'vendors'].includes(phase) && rolledForwardCount > 0 && (
-              <div className="mb-3">
-                <Callout tone="info" title="Prior-year values carried forward">
-                  <span className="inline-flex items-center gap-1">
-                    <RollIcon className="h-3.5 w-3.5" />
-                    Values marked <strong>Rolled forward</strong> came from {report.priorReportName}. They are proposals
-                    for this period, not conclusions — each one has to be reconfirmed or replaced.
-                  </span>
                 </Callout>
               </div>
             )}
