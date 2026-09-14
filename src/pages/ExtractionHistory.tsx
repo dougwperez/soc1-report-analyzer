@@ -9,22 +9,15 @@ import {
   Card,
   EmptyState,
   ExtractionStatusBadge,
-  Label,
   ReviewStatusBadge,
-  SearchIcon,
   SectionHeading,
   Select,
   SkeletonRow,
-  TextInput,
   UserChip,
-  extractionStatusMeta,
-  reviewStatusMeta,
 } from '../components/ui'
-import type { ExtractionStatus, ReviewStatus } from '../types'
-import { classNames as cx, formatDate, matches, relativeTime } from '../lib/util'
+import { formatDate, relativeTime } from '../lib/util'
 
 type LoadState = 'loading' | 'ready' | 'error'
-type SortKey = 'createdAt' | 'updatedAt' | 'name'
 
 const COLUMNS = [
   'Report name',
@@ -46,13 +39,6 @@ export default function ExtractionHistory() {
   const { state } = useStore()
 
   const [load, setLoad] = useState<LoadState>('loading')
-  const [search, setSearch] = useState('')
-  const [application, setApplication] = useState('')
-  const [extraction, setExtraction] = useState('')
-  const [review, setReview] = useState('')
-  const [period, setPeriod] = useState('')
-  const [createdBy, setCreatedBy] = useState('')
-  const [sort, setSort] = useState<SortKey>('createdAt')
   const [forceEmpty, setForceEmpty] = useState(false)
 
   // The real table is server-paged; the mock shows the same loading beat.
@@ -62,55 +48,14 @@ export default function ExtractionHistory() {
     return () => clearTimeout(t)
   }, [])
 
-  const applicationOptions = useMemo(
-    () => Array.from(new Set(state.reports.map((r) => r.application))).sort(),
-    [state.reports],
-  )
-  const periodOptions = useMemo(
-    () => Array.from(new Set(state.reports.map((r) => r.periodLabel))).sort(),
-    [state.reports],
-  )
-  const creatorOptions = useMemo(
-    () => Array.from(new Set(state.reports.map((r) => r.createdById))),
+  // Most recent upload first.
+  const sorted = useMemo(
+    () =>
+      [...state.reports].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
     [state.reports],
   )
 
-  const filtered = useMemo(() => {
-    const rows = state.reports.filter((r) => {
-      if (search.trim()) {
-        const hit =
-          matches(r.name, search) ||
-          matches(r.serviceOrganization, search) ||
-          matches(r.application, search) ||
-          matches(r.controlId, search) ||
-          matches(r.id, search)
-        if (!hit) return false
-      }
-      if (application && r.application !== application) return false
-      if (extraction && r.extractionStatus !== extraction) return false
-      if (review && r.reviewStatus !== review) return false
-      if (period && r.periodLabel !== period) return false
-      if (createdBy && r.createdById !== createdBy) return false
-      return true
-    })
-    return rows.sort((a, b) => {
-      if (sort === 'name') return a.name.localeCompare(b.name)
-      return new Date(b[sort]).getTime() - new Date(a[sort]).getTime()
-    })
-  }, [state.reports, search, application, extraction, review, period, createdBy, sort])
-
-  const activeFilters = [search, application, extraction, review, period, createdBy].filter(Boolean).length
-
-  function clearFilters() {
-    setSearch('')
-    setApplication('')
-    setExtraction('')
-    setReview('')
-    setPeriod('')
-    setCreatedBy('')
-  }
-
-  const rows = forceEmpty ? [] : filtered
+  const rows = forceEmpty ? [] : sorted
 
   return (
     <div className="mx-auto max-w-[1600px] px-6 py-7">
@@ -142,94 +87,8 @@ export default function ExtractionHistory() {
         }
       />
 
-      {/* -------------------------------- filters ------------------------------- */}
-      <Card className="mt-5 p-4">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-6">
-          <div className="xl:col-span-2">
-            <Label htmlFor="hist-search">Search</Label>
-            <div className="relative">
-              <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
-              <TextInput
-                id="hist-search"
-                className="pl-8"
-                placeholder="Report, service organization, control ID…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
-          </div>
-          <div>
-            <Label htmlFor="hist-app">Application</Label>
-            <Select id="hist-app" value={application} onChange={(e) => setApplication(e.target.value)}>
-              <option value="">All applications</option>
-              {applicationOptions.map((a) => (
-                <option key={a} value={a}>{a}</option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <Label htmlFor="hist-extraction">Extraction status</Label>
-            <Select id="hist-extraction" value={extraction} onChange={(e) => setExtraction(e.target.value)}>
-              <option value="">All</option>
-              {(Object.keys(extractionStatusMeta) as ExtractionStatus[]).map((k) => (
-                <option key={k} value={k}>{extractionStatusMeta[k].label}</option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <Label htmlFor="hist-review">Review status</Label>
-            <Select id="hist-review" value={review} onChange={(e) => setReview(e.target.value)}>
-              <option value="">All</option>
-              {(Object.keys(reviewStatusMeta) as ReviewStatus[]).map((k) => (
-                <option key={k} value={k}>{reviewStatusMeta[k].label}</option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <Label htmlFor="hist-period">Reporting period</Label>
-            <Select id="hist-period" value={period} onChange={(e) => setPeriod(e.target.value)}>
-              <option value="">All periods</option>
-              {periodOptions.map((p) => (
-                <option key={p} value={p}>{p}</option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <Label htmlFor="hist-creator">Created by</Label>
-            <Select id="hist-creator" value={createdBy} onChange={(e) => setCreatedBy(e.target.value)}>
-              <option value="">Anyone</option>
-              {creatorOptions.map((id) => (
-                <option key={id} value={id}>{userById(id)?.name ?? id}</option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <Label htmlFor="hist-sort">Sort by</Label>
-            <Select id="hist-sort" value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
-              <option value="createdAt">Upload date</option>
-              <option value="updatedAt">Last updated</option>
-              <option value="name">Report name</option>
-            </Select>
-          </div>
-        </div>
-
-        {activeFilters > 0 && (
-          <div className="mt-3 flex items-center gap-2 border-t border-ink-100 pt-3">
-            <Badge tone="indigo">
-              {activeFilters} filter{activeFilters > 1 ? 's' : ''} applied
-            </Badge>
-            <span className="text-[12px] text-ink-500">
-              Showing {rows.length} of {state.reports.length} reports
-            </span>
-            <Button size="sm" variant="ghost" className="ml-auto" onClick={clearFilters}>
-              Clear filters
-            </Button>
-          </div>
-        )}
-      </Card>
-
       {/* --------------------------------- table -------------------------------- */}
-      <Card className="mt-4 overflow-hidden">
+      <Card className="mt-5 overflow-hidden">
         {load === 'error' ? (
           <div className="p-5">
             <Callout
@@ -337,18 +196,10 @@ export default function ExtractionHistory() {
 
             {load === 'ready' && rows.length === 0 && (
               <EmptyState
-                title={activeFilters > 0 ? 'No reports match these filters' : 'No reports yet'}
-                body={
-                  activeFilters > 0
-                    ? 'Try widening the reporting period or clearing the search box.'
-                    : 'Upload a SOC 1 report to extract its control objectives, exceptions, and CUECs.'
-                }
+                title="No reports yet"
+                body="Upload a SOC 1 report to extract its control objectives, exceptions, and CUECs."
                 action={
-                  activeFilters > 0 ? (
-                    <Button variant="secondary" onClick={clearFilters}>Clear filters</Button>
-                  ) : (
-                    <Button variant="primary" onClick={() => navigate('/extract')}>Extract a report</Button>
-                  )
+                  <Button variant="primary" onClick={() => navigate('/extract')}>Extract a report</Button>
                 }
               />
             )}
@@ -357,9 +208,8 @@ export default function ExtractionHistory() {
       </Card>
 
       {load === 'ready' && rows.length > 0 && (
-        <p className={cx('mt-3 text-[12px] text-ink-500')}>
-          {rows.length} report{rows.length === 1 ? '' : 's'}
-          {activeFilters === 0 && ' · all reports for your business unit'}
+        <p className="mt-3 text-[12px] text-ink-500">
+          {rows.length} report{rows.length === 1 ? '' : 's'} · all reports for your business unit
         </p>
       )}
     </div>
